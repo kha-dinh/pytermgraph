@@ -1,5 +1,6 @@
 from enum import Enum
-from typing import List
+from typing import Dict, List
+from .support import Direction, Position, Step, opposite
 
 arrow_head_t = "▲"
 arrow_head_b = "▼"
@@ -17,32 +18,14 @@ edge_vert = "│"
 edge_conn_right = "├"
 edge_conn_left = "┤"
 edge_conn_bot = "┬"
-edge_conn_top = "┬"
+edge_conn_top = "┴"
 
 
-class Position:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-    def __add__(self, other):
-        if isinstance(other, Position):
-            return Position(self.x + other.x, self.y + other.y)
-        if isinstance(other, int):
-            return Position(self.x + other, self.y + other)
-        else:
-            return Position(0, 0)
-
-    def __sub__(self, other):
-        if isinstance(other, Position):
-            return Position(self.x - other.x, self.y - other.y)
-        if isinstance(other, int):
-            return Position(self.x - other, self.y - other)
-        else:
-            return Position(0, 0)
-
-
+# Forward declaration
 class Canvas:
+    width: int
+    height: int
+
     def draw(self, string: str, position: Position, offset: Position = Position(1, 0)):
         pass
 
@@ -52,17 +35,20 @@ class RenderObject:
         self.position = position
         self.canvas = canvas
 
+    def render(self):
+        """Render the object into the parent canvas, based on its position"""
+        pass
+
 
 class Anchor:
     def __init__(
         self,
         position,
         obj: RenderObject,  # Parent object
-        edge: Edge,  # Parent object
     ) -> None:
         self.position = position
         self.obj = obj
-        self.edge = edge
+        # self.edge = edge
         pass
 
 
@@ -73,55 +59,6 @@ class Corner(Enum):
     BOTTOM_RIGHT = "bottom_right"
 
 
-class Direction(Enum):
-    UP = 1
-    DOWN = 2
-    LEFT = 3
-    RIGHT = 4
-    HORIZONTAL = 5
-    VERTICAL = 6
-
-
-def opposite(direction: Direction):
-    match direction:
-        case Direction.UP:
-            return Direction.DOWN
-        case Direction.DOWN:
-            return Direction.UP
-        case Direction.LEFT:
-            return Direction.RIGHT
-        case Direction.RIGHT:
-            return Direction.LEFT
-        case Direction.VERTICAL:
-            return Direction.HORIZONTAL
-        case Direction.HORIZONTAL:
-            return Direction.VERTICAL
-
-
-class Step:
-    def __init__(
-        self,
-        position: Position,
-        direction: Direction = Direction.HORIZONTAL,
-        previous: "Step | None" = None,
-    ):
-        self.previous = previous
-        self.position = position
-        self.direction = direction
-
-        if previous:
-            diff = self.position - previous.position
-            assert not (diff.x == 0 ^ diff.y == 0)
-            if diff.x > 0:
-                self.direction = Direction.RIGHT
-            elif diff.x < 0:
-                self.direction = Direction.LEFT
-            elif diff.y > 0:
-                self.direction = Direction.DOWN
-            elif diff.y < 0:
-                self.direction = Direction.UP
-
-
 class Edge(RenderObject):
     def __init__(
         self,
@@ -130,13 +67,19 @@ class Edge(RenderObject):
         end: Position,
         start_direction=Direction.HORIZONTAL,
         end_direction=Direction.VERTICAL,
+        start_object: RenderObject | None = None,
+        end_object: RenderObject | None = None,
     ) -> None:
         super().__init__(start, canvas)
         self.start = start
         self.end = end
-        self.path = self.generate_manhattan_path(start_direction, end_direction)
+        self.start_direction = start_direction
+        self.end_direction = end_direction
+        self.start_object = start_object
+        self.end_object = end_object
 
     def render(self):
+        self.path = self.generate_manhattan_path()
         for p in self.path:
             if (
                 p.direction == Direction.LEFT
@@ -154,7 +97,6 @@ class Edge(RenderObject):
             prev = p.previous
             if not prev:
                 continue
-
             # NoticeChange in direction
             if prev.direction != p.direction:
                 if prev.direction == Direction.RIGHT and p.direction == Direction.DOWN:
@@ -174,11 +116,12 @@ class Edge(RenderObject):
                     self.canvas.draw(corner_tr, prev.position)
                 if prev.direction == Direction.UP and p.direction == Direction.RIGHT:
                     self.canvas.draw(corner_tl, prev.position)
+            if p == self.path[-1]:
+                self.canvas.draw(arrow_head_b, p.position)
+                pass
 
-    def generate_manhattan_path(
-        self, start_direction: Direction, end_direction: Direction
-    ) -> List[Step]:
-        current = Step(self.start, start_direction)
+    def generate_manhattan_path(self) -> List[Step]:
+        current = Step(self.start, self.start_direction)
         path = [current]
         dx, dy = self.end.x - self.start.x, self.end.y - self.start.y
 
@@ -201,14 +144,16 @@ class Edge(RenderObject):
                         direction,
                         current,
                     )
-            assert next.position.x <= self.canvas.width
-            assert next.position.y <= self.canvas.height
+                case _:
+                    raise RuntimeError
+            assert 0 <= next.position.x <= self.canvas.width
+            assert 0 <= next.position.y <= self.canvas.height
 
             return next
 
-        if start_direction != end_direction:
+        if self.start_direction != self.end_direction:
             # Move in one direction, then the other
-            for direction in [start_direction, end_direction]:
+            for direction in [self.start_direction, self.end_direction]:
                 while (
                     direction == Direction.HORIZONTAL
                     and current.position.x != self.end.x
@@ -219,27 +164,21 @@ class Edge(RenderObject):
                     path.append(current)
         else:
             # Move eto midpoint, then change direction
-            midpoint = Position(self.start.x + dx // 2, self.start.y + dy // 2)
+            mid = Position.midpoint(self.start, self.end)
 
-            for direction in [start_direction, opposite(start_direction)]:
+            for direction in [self.start_direction, opposite(self.start_direction)]:
                 while (
-                    direction == Direction.HORIZONTAL
-                    and current.position.x != midpoint.x
-                ) or (
-                    direction == Direction.VERTICAL and current.position.y != midpoint.y
-                ):
+                    direction == Direction.HORIZONTAL and current.position.x != mid.x
+                ) or (direction == Direction.VERTICAL and current.position.y != mid.y):
                     current = move(current, direction)
                     path.append(current)
-            for direction in [opposite(end_direction), end_direction]:
-                # print(direction)
+            for direction in [opposite(self.end_direction), self.end_direction]:
                 while (
                     direction == Direction.HORIZONTAL
                     and current.position.x != self.end.x
                 ) or (
                     direction == Direction.VERTICAL and current.position.y != self.end.y
                 ):
-                    # print("Stepping")
-                    # print(current.position.__dict__)
                     current = move(current, direction)
                     path.append(current)
 
@@ -276,7 +215,12 @@ class Box(RenderObject):
         self.text = text
 
         self.corners = {}
-        self.anchors = {}
+        self.anchors: Dict[Direction, List[Anchor]] = {}
+
+        self.anchors[Direction.UP] = []
+        self.anchors[Direction.DOWN] = []
+        self.anchors[Direction.LEFT] = []
+        self.anchors[Direction.RIGHT] = []
 
         self.center = Position(self.width // 2, self.height // 2)
 
@@ -284,11 +228,6 @@ class Box(RenderObject):
         self.corners[Corner.TOP_RIGHT] = Position(self.width - 1, 0)
         self.corners[Corner.BOTTOM_LEFT] = Position(0, self.height - 1)
         self.corners[Corner.BOTTOM_RIGHT] = Position(self.width - 1, self.height - 1)
-
-        self.anchors[Direction.LEFT] = []
-        self.anchors[Direction.RIGHT] = []
-        self.anchors[Direction.UP] = []
-        self.anchors[Direction.DOWN] = []
 
         # self.anchors["left"].insert(Position())
         super().__init__(position, canvas)
@@ -316,36 +255,41 @@ class Box(RenderObject):
         if self.text:
             self.canvas.draw(self.text, self.position, self.get_label_pos(self.text))
 
-    def create_anchor(self, direction: Direction) -> Position:
-        new_anchor = Position(0, 0)
-        anchors_dir: List[Position] = self.anchors[direction]
-        anchors_dir.append(new_anchor)
+    def create_anchor(self, direction: Direction) -> Anchor:
+        anchors_dir = self.anchors[direction]
 
-        print(anchors_dir)
+        size = len(anchors_dir)
 
-        size = len(self.anchors[direction])
+        step_x = self.width // (size + 2)
+        step_y = self.height // (size + 2)
+        match direction:
+            case Direction.DOWN:
+                offset_x = step_x
+                offset_y = self.height - 1
+            case Direction.UP:
+                offset_x = step_x
+                offset_y = 0
 
-        offset_x = 0
-        offset_y = 0
-
-        step_x = self.width // (size + 1)
-        step_y = self.height // (size + 1)
-
-        print(step_x)
-        print(size)
-        print(self.width)
+        # 1. Adjust anchor positions
         for idx in range(size):
-            if direction == Direction.DOWN:
-                offset_x += step_x
-                anchors_dir[idx] = Position(offset_x, self.height - 1)
-            if direction == Direction.UP:
-                offset_x += step_x
-                anchors_dir[idx] = Position(offset_x, 0)
-                print(self.position.__dict__)
-                print(anchors_dir[idx].__dict__)
+            anchors_dir[idx].position.x = offset_x
+            anchors_dir[idx].position.y = offset_y
+
+            match direction:
+                case Direction.DOWN:
+                    offset_x += step_x
+                case Direction.UP:
+                    offset_x += step_x
+
+        new_anchor = Anchor(Position(offset_x, offset_y), self)
+        anchors_dir.append(new_anchor)
+        print(anchors_dir)
+        print(offset_x)
+
+        return new_anchor
 
         # Readjust
-        return anchors_dir[size - 1]
+        # return anchors_dir[size - 1]
 
     def get_label_pos(self, label: str) -> Position:
         # Offset from the left edge

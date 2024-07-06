@@ -1,6 +1,8 @@
+from enum import Enum
+from sys import is_finalizing
 from typing import List
 import numpy as np
-from enum import Enum
+
 from .render_object import Direction, Position, Box, Edge, RenderObject
 
 # ASCI art characters for creating diagrams
@@ -54,7 +56,10 @@ class Canvas:
         self.height = height
         self.fill = fill
 
-        # +1 for the newline char
+        self.render_list: List[RenderObject] = []
+
+    def render_canvas(self):
+        # +1 in the width the newline char
         self.array = np.array(
             [[self.fill for x in range(self.width + 1)] for _ in range(self.height)]
         )
@@ -67,9 +72,11 @@ class Canvas:
         assert position.y + height <= self.height
 
         box = Box(self, width, height, position, label)
+
+        self.render_list.append(box)
         return box
 
-    def draw_edge(
+    def add_edge(
         self,
         start: Position,
         end: Position,
@@ -77,6 +84,8 @@ class Canvas:
         end_direction: Direction = Direction.VERTICAL,
     ) -> Edge:
         edge = Edge(self, start, end, start_direction, end_direction)
+        self.render_list.append(edge)
+
         return edge
 
     def draw_edge_boxes(
@@ -89,20 +98,62 @@ class Canvas:
         assert box1.canvas == self
         assert box2.canvas == self
 
-        center1 = self.to_canvas_pos(box1, box1.create_anchor(Direction.DOWN))
-        center2 = self.to_canvas_pos(box2, box2.create_anchor(Direction.UP))
-        return self.draw_edge(center1, center2, start_direction, end_direction)
+        anchor1 = box1.create_anchor(Direction.DOWN)
+        anchor2 = box2.create_anchor(Direction.UP)
+
+        print("A anchor")
+        for a in box1.anchors[Direction.DOWN]:
+            print(a.position.__dict__)
+
+        print("B anchor")
+        for a in box2.anchors[Direction.UP]:
+            print(a.position.__dict__)
+
+        center1 = self.to_canvas_pos(box1, anchor1.position)
+        center2 = self.to_canvas_pos(box2, anchor2.position)
+
+        for r in self.render_list:
+            if isinstance(r, Edge):
+                if not r.start_object or not r.end_object:
+                    continue
+                if r.start_object == box1:
+                    r.start = self.to_canvas_pos(
+                        box1, box1.anchors[Direction.DOWN][0].position
+                    )
+
+                    print(r.end.__dict__)
+                if r.end_object == box2:
+                    r.end = self.to_canvas_pos(
+                        box2, box2.anchors[Direction.UP][0].position
+                    )
+                    print(r.end.__dict__)
+
+        edge = Edge(self, center1, center2, start_direction, end_direction, box1, box2)
+        self.render_list.append(edge)
+        return edge
 
     def to_canvas_pos(self, obj: RenderObject, pos: Position):
         return obj.position + pos
 
-    def draw(self, string: str, position: Position, offset: Position = Position(0, 0)):
+    def render(self):
+        self.render_canvas()
+        for o in self.render_list:
+            o.render()
+
+    def draw(self, text: str, position: Position, offset: Position = Position(0, 0)):
         assert 0 <= position.x + offset.x <= self.width
         assert 0 <= position.y + offset.y <= self.height
 
-        self.array[position.y + offset.y][
-            position.x + offset.x : position.x + offset.x + len(string)
-        ] = [c for c in string]
+        for idx, c in enumerate(text):
+            self.draw_char(c, Position(position.x + idx, position.y), offset)
+
+    def get_char(self, position: Position, offset: Position = Position(0, 0)) -> str:
+        return self.array[position.y + offset.y][position.x + offset.x]
+
+    def draw_char(
+        self, char: str, position: Position, offset: Position = Position(0, 0)
+    ):
+        self.array[position.y + offset.y][position.x + offset.x] = char
 
     def to_string(self):
         return "".join([item for row in self.array for item in row])
