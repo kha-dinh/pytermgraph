@@ -29,6 +29,12 @@ class Canvas:
     def draw(self, string: str, position: Position, offset: Position = Position(1, 0)):
         pass
 
+    def draw_line(self, start: Position, end: Position, line_symbol: str):
+        pass
+
+    def to_canvas_pos(self, obj: "RenderObject", pos: Position):
+        pass
+
 
 class RenderObject:
     def __init__(self, position: Position, canvas: Canvas) -> None:
@@ -238,14 +244,38 @@ class Box(RenderObject):
                 self.canvas.draw(" ", self.position, Position(i, j))
 
         # Top + bottom edges
-        for i in range(1, self.width - 1):
-            self.canvas.draw(edge_hori, self.position, Position(i, 0))
-            self.canvas.draw(edge_hori, self.position, Position(i, self.height - 1))
+        self.canvas.draw_line(
+            self.canvas.to_canvas_pos(self, Position(0, 0)),
+            self.canvas.to_canvas_pos(self, Position(self.width - 1, 0)),
+            line_symbol=edge_hori,
+        )
+
+        self.canvas.draw_line(
+            self.canvas.to_canvas_pos(self, Position(0, self.height - 1)),
+            self.canvas.to_canvas_pos(self, Position(self.width - 1, self.height - 1)),
+            line_symbol=edge_hori,
+        )
+
+        self.canvas.draw_line(
+            self.canvas.to_canvas_pos(self, Position(0, 0)),
+            self.canvas.to_canvas_pos(self, Position(0, self.height - 1)),
+            line_symbol=edge_vert,
+        )
+
+        self.canvas.draw_line(
+            self.canvas.to_canvas_pos(self, Position(self.width - 1, 0)),
+            self.canvas.to_canvas_pos(self, Position(self.width - 1, self.height - 1)),
+            line_symbol=edge_vert,
+        )
+
+        # for i in range(1, self.width - 1):
+        #     self.canvas.draw(edge_hori, self.position, Position(i, 0))
+        #     self.canvas.draw(edge_hori, self.position, Position(i, self.height - 1))
 
         # left + right edges
-        for i in range(1, self.height - 1):
-            self.canvas.draw(edge_vert, self.position, Position(0, i))
-            self.canvas.draw(edge_vert, self.position, Position(self.width - 1, i))
+        # for i in range(1, self.height - 1):
+        #     self.canvas.draw(edge_vert, self.position, Position(0, i))
+        #     self.canvas.draw(edge_vert, self.position, Position(self.width - 1, i))
 
         self.canvas.draw(corner_tl, self.position, self.corners[Corner.TOP_LEFT])
         self.canvas.draw(corner_tr, self.position, self.corners[Corner.TOP_RIGHT])
@@ -283,8 +313,8 @@ class Box(RenderObject):
 
         new_anchor = Anchor(Position(offset_x, offset_y), self)
         anchors_dir.append(new_anchor)
-        print(anchors_dir)
-        print(offset_x)
+        # print(anchors_dir)
+        # print(offset_x)
 
         return new_anchor
 

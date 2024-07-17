@@ -49,6 +49,9 @@ class Position:
         else:
             raise TypeError
 
+    def __eq__(self, other):
+        return self.x == other.x and self.y == other.y
+
     def __mul__(self, other):
         if isinstance(other, Position):
             return Position(self.x * other.x, self.y * other.y)
@@ -56,6 +59,15 @@ class Position:
             return Position(self.x * other, self.y * other)
         else:
             raise TypeError
+
+    def norm(self):
+        dx = 0
+        dy = 0
+        if self.x != 0:
+            dx = 1 if self.x > 0 else -1
+        if self.y != 0:
+            dy = 1 if self.y > 0 else -1
+        return Position(dx, dy)
 
     @classmethod
     def midpoint(cls, a, b):

@@ -3,7 +3,7 @@ from sys import is_finalizing
 from typing import List
 import numpy as np
 
-from .render_object import Direction, Position, Box, Edge, RenderObject
+from .object import Direction, Position, Box, Edge, RenderObject
 
 # ASCI art characters for creating diagrams
 # ## Characters:
@@ -149,6 +149,24 @@ class Canvas:
 
     def get_char(self, position: Position, offset: Position = Position(0, 0)) -> str:
         return self.array[position.y + offset.y][position.x + offset.x]
+
+    def draw_line(self, start: Position, end: Position, line_symbol: str):
+        diff = end - start
+        current = start
+        # print(diff.__dict__)
+        # assert diff.x == 0 ^ diff.y == 0
+        step = diff.norm()
+
+        # print(current.__dict__)
+        # print(end.__dict__)
+        # print((current + step).__dict__)
+
+        while current != end:
+            self.draw_char(line_symbol, current)
+            # print(current.__dict__)
+            current += step
+
+        # self.array[position.y + offset.y][position.x + offset.x] = char
 
     def draw_char(
         self, char: str, position: Position, offset: Position = Position(0, 0)

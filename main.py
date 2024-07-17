@@ -1,6 +1,5 @@
 from pytermgraph.canvas import Canvas
-from pytermgraph.support import Position
-from pytermgraph.render_object import Direction
+from pytermgraph.support import Position, Direction
 
 # import pygraphviz as pgv
 # A = pgv.AGraph()
